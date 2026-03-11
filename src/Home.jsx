@@ -51,14 +51,14 @@ const Home = () => {
    </div> */}
 
    <div>
-     {/* <Hero/>
+      <Hero/>
      <Development/>
-     <Process/> */}
+     <Process/> 
      {/* <Services/> */}
      <Services2/>
-     {/* <Iso/>
+     <Iso/>
      <Info/>
-     <About/> */}
+     <About/> 
    </div>
    </>
   )
