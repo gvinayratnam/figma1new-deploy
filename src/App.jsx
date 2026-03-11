@@ -18,7 +18,7 @@ function App() {
       {/* <Home/> */}
       {/* <Theabout/> */}
       <BrowserRouter>
-        {/* <NavBar/> */}
+        <NavBar/> 
         <Routes>
           <Route path='/' element={<Home/>}/>
           <Route path='/about' element={<Theabout/>}/>
