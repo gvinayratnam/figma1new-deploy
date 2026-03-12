@@ -40,20 +40,21 @@ const REAL_SLIDE_COUNT = SERVICE_DATA.length
 const INITIAL_INDEX = CLONE_COUNT
 const END_CLONE_INDEX = CLONE_COUNT + REAL_SLIDE_COUNT
 const REAL_END_INDEX = CLONE_COUNT + REAL_SLIDE_COUNT - 1
+const TRANSITION = 'transform 0.9s ease'
 
 const Services2 = () => {
   const [current, setCurrent] = useState(INITIAL_INDEX)
-  const [isTransition, setIsTransition] = useState(true)
 
-  // ✅ All touch values as refs — zero re-renders during drag = no shivering
+  // Touch refs — no re-renders during drag
   const touchStartRef = useRef(null)
   const touchEndRef = useRef(null)
-  const dragRef = useRef(0)
   const isDragging = useRef(false)
+  const isTransition = useRef(true)
   const timerRef = useRef(null)
 
-  // ✅ Ref to every slide DOM element so we can update transform directly
+  // DOM refs — JS controls all visual updates
   const slideRefs = useRef([])
+  const imgRefs = useRef([])
 
   const extendSlides = useMemo(() => [
     SERVICE_DATA[SERVICE_DATA.length - 2],
@@ -63,43 +64,70 @@ const Services2 = () => {
     SERVICE_DATA[1],
   ], [])
 
-  // Helper — directly writes transform on all slides without React re-render
-  const updateSlideTransforms = (currentIdx, dragPercent, withTransition) => {
+  // Moves all slides
+  const applyTransform = (index, dragPercent = 0, withTransition = true) => {
     slideRefs.current.forEach(el => {
       if (!el) return
-      el.style.transition = withTransition ? 'transform 0.9s ease' : 'none'
-      el.style.transform = `translateX(calc(-${currentIdx * 100}% + ${dragPercent}%))`
+      el.style.transition = withTransition ? TRANSITION : 'none'
+      el.style.transform = `translateX(calc(-${index * 100}% + ${dragPercent}%))`
     })
   }
 
-  // Infinite loop — silently jump from clone to real slide
+  // Scales the peek image
+  const applyImageTransforms = (index, withTransition = true) => {
+    imgRefs.current.forEach((el, i) => {
+      if (!el) return
+      el.style.transition = withTransition ? TRANSITION : 'none'
+      el.style.transform = i === index + 1
+        ? 'translateX(-30%) scale(0.4)'
+        : 'scale(1)'
+    })
+  }
+
+  // ✅ One call updates both slides and images together
+  const applyAll = (index, dragPercent = 0, withTransition = true) => {
+    applyTransform(index, dragPercent, withTransition)
+    applyImageTransforms(index, withTransition)
+  }
+
+  // Set initial position on mount
+  useEffect(() => {
+    applyAll(INITIAL_INDEX, 0, false)
+  }, [])
+
+  // Infinite loop jump
   useEffect(() => {
     if (current === END_CLONE_INDEX) {
-      setTimeout(() => {
-        setIsTransition(false)
+      timerRef.current = setTimeout(() => {
+        // ✅ Update DOM first — no flash, no pop
+        applyAll(INITIAL_INDEX, 0, false)
+        isTransition.current = false
         setCurrent(INITIAL_INDEX)
       }, 900)
     } else if (current === CLONE_COUNT - 1) {
-      setTimeout(() => {
-        setIsTransition(false)
+      timerRef.current = setTimeout(() => {
+        applyAll(REAL_END_INDEX, 0, false)
+        isTransition.current = false
         setCurrent(REAL_END_INDEX)
       }, 900)
     }
   }, [current])
 
-  // Re-enable transition after silent jump — only when NOT dragging
+  // Re-enable transition after silent jump
   useEffect(() => {
-    if (!isTransition) {
-      if (isDragging.current) return  // ✅ don't re-enable during drag
-      const timer = setTimeout(() => setIsTransition(true), 50)
+    if (!isTransition.current && !isDragging.current) {
+      const timer = setTimeout(() => {
+        isTransition.current = true
+        slideRefs.current.forEach(el => {
+          if (el) el.style.transition = TRANSITION
+        })
+        imgRefs.current.forEach(el => {
+          if (el) el.style.transition = TRANSITION
+        })
+      }, 50)
       return () => clearTimeout(timer)
     }
-  }, [isTransition])
-
-  // Sync all slide DOM elements whenever current or isTransition changes via React
-  useEffect(() => {
-    updateSlideTransforms(current, 0, isTransition)
-  }, [current, isTransition])
+  }, [current])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -107,27 +135,31 @@ const Services2 = () => {
   }, [])
 
   const nextSlide = () => {
-    if (!isTransition) return  // block if mid-animation or mid-jump
-    setIsTransition(true)
-    setCurrent(prev => prev + 1)
+    if (!isTransition.current) return
+    setCurrent(prev => {
+      const next = prev + 1
+      applyAll(next, 0, true)
+      return next
+    })
   }
 
   const prevSlide = () => {
-    if (!isTransition) return
-    setIsTransition(true)
-    setCurrent(prev => prev - 1)
+    if (!isTransition.current) return
+    setCurrent(prev => {
+      const next = prev - 1
+      applyAll(next, 0, true)
+      return next
+    })
   }
 
   const onTouchStart = (e) => {
     if (window.innerWidth > 768) return
-    isDragging.current = true          // ✅ tell useEffect to stay out
+    isDragging.current = true
     touchStartRef.current = e.targetTouches[0].clientX
     touchEndRef.current = null
-    dragRef.current = 0
-    // disable transition directly on DOM — no React re-render, no useEffect trigger issues
-    slideRefs.current.forEach(el => {
-      if (el) el.style.transition = 'none'
-    })
+    // Disable transition directly on DOM — doesn't affect isTransition ref
+    slideRefs.current.forEach(el => { if (el) el.style.transition = 'none' })
+    imgRefs.current.forEach(el => { if (el) el.style.transition = 'none' })
   }
 
   const onTouchMove = (e) => {
@@ -136,23 +168,19 @@ const Services2 = () => {
     touchEndRef.current = currentX
     const distanceGap = currentX - touchStartRef.current
     const percentDrag = (distanceGap / window.innerWidth) * 100
-    dragRef.current = percentDrag * 0.8
-
-    // ✅ Update DOM directly — no setState, no re-render, buttery smooth
-    updateSlideTransforms(current, dragRef.current, false)
+    // ✅ Direct DOM update — zero React overhead
+    applyAll(current, percentDrag * 0.8, false)
   }
 
   const onTouchEnd = () => {
     if (window.innerWidth >= 768) return
 
-    isDragging.current = false  // ✅ allow useEffect to work again
+    isDragging.current = false
 
     if (!touchStartRef.current || !touchEndRef.current) {
-      // No real swipe — snap back
-      updateSlideTransforms(current, 0, true)
+      applyAll(current, 0, true)
       touchStartRef.current = null
       touchEndRef.current = null
-      dragRef.current = 0
       return
     }
 
@@ -160,21 +188,16 @@ const Services2 = () => {
     const swipePercent = (Math.abs(touchDistance) / window.innerWidth) * 100
 
     if (swipePercent > 20) {
-      // Re-enable transition state BEFORE calling next/prev
-      // so the !isTransition guard lets it through
-      setIsTransition(true)
+      isTransition.current = true
       if (touchDistance > 0) nextSlide()
       else prevSlide()
     } else {
-      // Not enough — snap back smoothly
-      updateSlideTransforms(current, 0, true)
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => setIsTransition(true), 900)
+      // Not enough swipe — snap back
+      applyAll(current, 0, true)
     }
 
     touchStartRef.current = null
     touchEndRef.current = null
-    dragRef.current = 0
   }
 
   return (
@@ -199,12 +222,8 @@ const Services2 = () => {
           {extendSlides.map((item, idx) => (
             <div
               key={idx}
-              ref={el => slideRefs.current[idx] = el}  // ✅ collect DOM refs
-              style={{
-                // initial style only — after mount, DOM is updated directly
-                transform: `translateX(-${INITIAL_INDEX * 100}%)`,
-                transition: 'transform 0.9s ease',
-              }}
+              ref={el => slideRefs.current[idx] = el}
+              // ✅ No transform or transition in style prop — JS controls 100%
               className='flex md:min-w-[88%] min-w-full justify-start md:flex-row flex-col pr-2 md:mr-0 mr-1 md:items-stretch items-center gap-5 relative'
               aria-roledescription="slide"
               aria-label={`${item.title} slide`}
@@ -212,13 +231,9 @@ const Services2 = () => {
               {/* Image */}
               <div className='lg:max-w-[250px] max-w-[230px] w-full flex items-center justify-center'>
                 <img
+                  ref={el => imgRefs.current[idx] = el}
+                  // ✅ No transform or transition in style prop — JS controls 100%
                   className='w-full md:h-full overflow-hidden lg:object-cover object-contain'
-                  style={{
-                    transform: idx === current + 1
-                      ? 'translateX(-30%) scale(0.4)'
-                      : 'scale(1)',
-                    transition: isTransition ? 'transform 0.9s ease' : '',
-                  }}
                   src={item.mainImg}
                   alt={item.title}
                 />
