@@ -105,7 +105,7 @@ const Services2 = () => {
 
         const touchDistance = touchStart - touchEnd
         const swipePercent = (Math.abs(touchDistance)/window.innerWidth)*100
-        setisTrastion(true)
+        
 
         if(swipePercent>20){
             if(touchDistance>0){
@@ -114,7 +114,14 @@ const Services2 = () => {
                 prevSlide()
             }
         }
-        setDrag(0)   
+        
+        const transTimerActive= setTimeout(()=>{
+            setisTrastion(true)
+        },20)   
+        setDrag(0)
+        setTouchStart(null)
+        setTouchEnd(null)
+        return () =>clearTimeout(transTimerActive)
 
     }
 
