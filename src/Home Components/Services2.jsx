@@ -105,7 +105,7 @@ const Services2 = () => {
         const swipePercent = (Math.abs(touchDistance)/window.innerWidth)*100
         setisTrastion(true)
 
-        if(swipePercent>20){
+        if(swipePercent>15){
             if(touchDistance>0){
                 nextSlide()
             }else{
