@@ -83,29 +83,31 @@ const Services2 = () => {
 
     const ontouchStart = (e) => {
         // console.log(e)
+        if(window.innerWidth>768) return;
         setTouchStart(e.targetTouches[0].clientX)
         setTouchEnd(null)
         setisTrastion(false)
     }
     const ontouchMoves = (e) => {
-        if (window.innerWidth<786){
-            const currentX = e.targetTouches[0].clientX
-            setTouchEnd(currentX)
-            const distanceGap = currentX - touchStart
-            const percentDrag = (distanceGap/window.innerWidth)*100
-            setDrag(percentDrag)
-        }
+        if (window.innerWidth>768 || touchStart===null) return;
+
+        const currentX = e.targetTouches[0].clientX
+        setTouchEnd(currentX)
+        const distanceGap = currentX - touchStart
+        const percentDrag = (distanceGap/window.innerWidth)*100
+        setDrag(percentDrag *0.8)
+        
             
     }
     const ontouchEnd = () => {
-        if (window.innerWidth > 768) return;
+        if (window.innerWidth >= 768) return;
         if (!touchStart || !touchEnd) return;
 
         const touchDistance = touchStart - touchEnd
         const swipePercent = (Math.abs(touchDistance)/window.innerWidth)*100
         setisTrastion(true)
 
-        if(swipePercent>15){
+        if(swipePercent>20){
             if(touchDistance>0){
                 nextSlide()
             }else{
