@@ -10,7 +10,7 @@ const Services2 = () => {
     let [istranstion, setisTrastion] = useState(true)
     let [touchStart, setTouchStart] = useState(null)
     let [touchEnd, setTouchEnd] = useState(null)
-
+    let [drag,setDrag] = useState(0)
     const service = [
         {
             title: "Development",
@@ -79,23 +79,43 @@ const Services2 = () => {
     }, [istranstion])
     console.log(current)
 
+    
+
     const ontouchStart = (e) => {
-        console.log(e)
-        setTouchEnd(null)
+        // console.log(e)
         setTouchStart(e.targetTouches[0].clientX)
+        setTouchEnd(null)
+        setisTrastion(false)
     }
     const ontouchMoves = (e) => {
-        setTouchEnd(e.targetTouches[0].clientX)
+        if (window.innerWidth<786){
+            const currentX = e.targetTouches[0].clientX
+            setTouchEnd(currentX)
+            const distanceGap = currentX - touchStart
+            const percentDrag = (distanceGap/window.innerWidth)*100
+            setDrag(percentDrag)
+        }
+            
     }
     const ontouchEnd = () => {
         if (window.innerWidth > 768) return;
         if (!touchStart || !touchEnd) return;
 
         const touchDistance = touchStart - touchEnd
-        touchDistance > 0 ? nextSlide() : prevSlide()
+        const swipePercent = (Math.abs(touchDistance)/window.innerWidth)*100
+        setisTrastion(true)
+
+        if(swipePercent>20){
+            if(touchDistance>0){
+                nextSlide()
+            }else{
+                prevSlide()
+            }
+        }
+        setDrag(0)   
 
     }
-    console.log(touchStart)
+
     return (
         <div className='md:h-auto h-auto relative md:py-15  text-white'>
             <div className='bg-center  absolute inset-0 bg-cover z-0' style={{ backgroundImage: `url(${serbg})` }}></div>
@@ -115,7 +135,7 @@ const Services2 = () => {
 
                             return (
                                 <div key={idx} style={{
-                                    transform: `translateX(-${current * 100}%)`,
+                                    transform: `translateX(calc(-${current * 100}% + ${drag}%))`,
                                     transition: istranstion ? "transform 0.9s ease" : ''
 
                                 }}
@@ -141,12 +161,12 @@ const Services2 = () => {
                                         <ul className='text-xs grid lg:grid-cols-1 grid-cols-2 lg:gap-3 gap-2'>
                                             {item.list.map((listItem, idx) => <li className='flex gap-1'> <span className='text-[#07C42C]'>//</span> <span>{listItem}</span></li>)}
                                         </ul>
-                                        <button className='border rounded-md lg:px-3 px-2 lg:py-2 py-1 text-xs font-medium '>START A PROJECT</button>
+                                        <button className='border rounded-md lg:px-3 px-2 lg:py-2 py-1 text-xs font-medium cursor-pointer '>START A PROJECT</button>
                                     </div>
 
                                     {/* button */}
-                                    <div className=' flex justify-center items-center  md:static fixed bottom-1 right-3'>
-                                        <div onClick={nextSlide} className='cursor-pointer lg:p-6 p-2 rounded-full bg-black shadow-[inset_0px_0px_16px_0px_gray,_0px_0px_2px_1px_black] '>
+                                    <div className=' flex justify-center items-center  md:static fixed bottom-1 right-3 outline-none'>
+                                        <div onClick={nextSlide} className='cursor-pointer lg:p-6 p-2  rounded-full bg-black shadow-[inset_0px_0px_16px_0px_gray,_0px_0px_2px_1px_black] '>
                                             <FiArrowRight className='md:text-3xl sm:text-2xl text-xl' />
                                         </div>
                                     </div>
