@@ -95,7 +95,7 @@ const Services2 = () => {
         setTouchEnd(currentX)
         const distanceGap = currentX - touchStart
         const percentDrag = (distanceGap/window.innerWidth)*100
-        setDrag(percentDrag *0.4)
+        setDrag(percentDrag)
         
             
     }
