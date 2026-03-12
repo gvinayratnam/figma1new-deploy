@@ -40,21 +40,15 @@ const REAL_SLIDE_COUNT = SERVICE_DATA.length
 const INITIAL_INDEX = CLONE_COUNT
 const END_CLONE_INDEX = CLONE_COUNT + REAL_SLIDE_COUNT
 const REAL_END_INDEX = CLONE_COUNT + REAL_SLIDE_COUNT - 1
-const TRANSITION = 'transform 0.9s ease'
 
 const Services2 = () => {
   const [current, setCurrent] = useState(INITIAL_INDEX)
-
-  // Touch refs — no re-renders during drag
-  const touchStartRef = useRef(null)
-  const touchEndRef = useRef(null)
-  const isDragging = useRef(false)
-  const isTransition = useRef(true)
+  const [isTransition, setIsTransition] = useState(true)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [touchStart, setTouchStart] = useState(null)
+  const [touchEnd, setTouchEnd] = useState(null)
+  const [drag, setDrag] = useState(0)
   const timerRef = useRef(null)
-
-  // DOM refs — JS controls all visual updates
-  const slideRefs = useRef([])
-  const imgRefs = useRef([])
 
   const extendSlides = useMemo(() => [
     SERVICE_DATA[SERVICE_DATA.length - 2],
@@ -64,50 +58,16 @@ const Services2 = () => {
     SERVICE_DATA[1],
   ], [])
 
-  // Moves all slides
-  const applyTransform = (index, dragPercent = 0, withTransition = true) => {
-    slideRefs.current.forEach(el => {
-      if (!el) return
-      el.style.transition = withTransition ? TRANSITION : 'none'
-      el.style.transform = `translateX(calc(-${index * 100}% + ${dragPercent}%))`
-    })
-  }
-
-  // Scales the peek image
-  const applyImageTransforms = (index, withTransition = true) => {
-    imgRefs.current.forEach((el, i) => {
-      if (!el) return
-      el.style.transition = withTransition ? TRANSITION : 'none'
-      el.style.transform = i === index + 1
-        ? 'translateX(-30%) scale(0.4)'
-        : 'scale(1)'
-    })
-  }
-
-  // ✅ One call updates both slides and images together
-  const applyAll = (index, dragPercent = 0, withTransition = true) => {
-    applyTransform(index, dragPercent, withTransition)
-    applyImageTransforms(index, withTransition)
-  }
-
-  // Set initial position on mount
-  useEffect(() => {
-    applyAll(INITIAL_INDEX, 0, false)
-  }, [])
-
-  // Infinite loop jump
+  // Infinite loop — silently jump from clone to real slide
   useEffect(() => {
     if (current === END_CLONE_INDEX) {
-      timerRef.current = setTimeout(() => {
-        // ✅ Update DOM first — no flash, no pop
-        applyAll(INITIAL_INDEX, 0, false)
-        isTransition.current = false
+      setTimeout(() => {
+        setIsTransition(false)
         setCurrent(INITIAL_INDEX)
       }, 900)
     } else if (current === CLONE_COUNT - 1) {
-      timerRef.current = setTimeout(() => {
-        applyAll(REAL_END_INDEX, 0, false)
-        isTransition.current = false
+      setTimeout(() => {
+        setIsTransition(false)
         setCurrent(REAL_END_INDEX)
       }, 900)
     }
@@ -115,19 +75,19 @@ const Services2 = () => {
 
   // Re-enable transition after silent jump
   useEffect(() => {
-    if (!isTransition.current && !isDragging.current) {
-      const timer = setTimeout(() => {
-        isTransition.current = true
-        slideRefs.current.forEach(el => {
-          if (el) el.style.transition = TRANSITION
-        })
-        imgRefs.current.forEach(el => {
-          if (el) el.style.transition = TRANSITION
-        })
-      }, 50)
+    if (!isTransition) {
+      const timer = setTimeout(() => setIsTransition(true), 50)
       return () => clearTimeout(timer)
     }
-  }, [current])
+  }, [isTransition])
+
+  // Unlock click guard after animation completes
+  useEffect(() => {
+    if (isAnimating) {
+      const timer = setTimeout(() => setIsAnimating(false), 900)
+      return () => clearTimeout(timer)
+    }
+  }, [isAnimating])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -135,69 +95,63 @@ const Services2 = () => {
   }, [])
 
   const nextSlide = () => {
-    if (!isTransition.current) return
-    setCurrent(prev => {
-      const next = prev + 1
-      applyAll(next, 0, true)
-      return next
-    })
+    if (isAnimating) return
+    setIsAnimating(true)
+    setIsTransition(true)
+    setCurrent(prev => prev + 1)
   }
 
   const prevSlide = () => {
-    if (!isTransition.current) return
-    setCurrent(prev => {
-      const next = prev - 1
-      applyAll(next, 0, true)
-      return next
-    })
+    if (isAnimating) return
+    setIsAnimating(true)
+    setIsTransition(true)
+    setCurrent(prev => prev - 1)
   }
 
   const onTouchStart = (e) => {
     if (window.innerWidth > 768) return
-    isDragging.current = true
-    touchStartRef.current = e.targetTouches[0].clientX
-    touchEndRef.current = null
-    // Disable transition directly on DOM — doesn't affect isTransition ref
-    slideRefs.current.forEach(el => { if (el) el.style.transition = 'none' })
-    imgRefs.current.forEach(el => { if (el) el.style.transition = 'none' })
+    setTouchStart(e.targetTouches[0].clientX)
+    setTouchEnd(null)
+    // setIsTransition(false) // disable CSS so drag follows finger smoothly
   }
 
   const onTouchMove = (e) => {
-    if (window.innerWidth > 768 || touchStartRef.current === null) return
+    if (window.innerWidth > 768 || touchStart === null) return
     const currentX = e.targetTouches[0].clientX
-    touchEndRef.current = currentX
-    const distanceGap = currentX - touchStartRef.current
+    setTouchEnd(currentX)
+    const distanceGap = currentX - touchStart
     const percentDrag = (distanceGap / window.innerWidth) * 100
-    // ✅ Direct DOM update — zero React overhead
-    applyAll(current, percentDrag * 0.8, false)
+    setDrag(percentDrag * 0.8)
   }
 
   const onTouchEnd = () => {
     if (window.innerWidth >= 768) return
-
-    isDragging.current = false
-
-    if (!touchStartRef.current || !touchEndRef.current) {
-      applyAll(current, 0, true)
-      touchStartRef.current = null
-      touchEndRef.current = null
+    if (!touchStart || !touchEnd) {
+      setIsTransition(true)
+      setDrag(0)
+      setTouchStart(null)
+      setTouchEnd(null)
       return
     }
 
-    const touchDistance = touchStartRef.current - touchEndRef.current
+    const touchDistance = touchStart - touchEnd
     const swipePercent = (Math.abs(touchDistance) / window.innerWidth) * 100
 
     if (swipePercent > 20) {
-      isTransition.current = true
+      // Re-enable transition BEFORE calling nextSlide/prevSlide
+      // so isAnimating guard sees isTransition=true and lets it through
+      setIsTransition(true)
       if (touchDistance > 0) nextSlide()
       else prevSlide()
     } else {
-      // Not enough swipe — snap back
-      applyAll(current, 0, true)
+      // Not enough swipe — snap back with a short delay
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setIsTransition(true), 20)
     }
 
-    touchStartRef.current = null
-    touchEndRef.current = null
+    setDrag(0)
+    setTouchStart(null)
+    setTouchEnd(null)
   }
 
   return (
@@ -222,8 +176,10 @@ const Services2 = () => {
           {extendSlides.map((item, idx) => (
             <div
               key={idx}
-              ref={el => slideRefs.current[idx] = el}
-              // ✅ No transform or transition in style prop — JS controls 100%
+              style={{
+                transform: `translateX(calc(-${current * 100}% + ${drag}%))`,
+                transition: isTransition ? 'transform 0.9s ease' : '',
+              }}
               className='flex md:min-w-[88%] min-w-full justify-start md:flex-row flex-col pr-2 md:mr-0 mr-1 md:items-stretch items-center gap-5 relative'
               aria-roledescription="slide"
               aria-label={`${item.title} slide`}
@@ -231,9 +187,13 @@ const Services2 = () => {
               {/* Image */}
               <div className='lg:max-w-[250px] max-w-[230px] w-full flex items-center justify-center'>
                 <img
-                  ref={el => imgRefs.current[idx] = el}
-                  // ✅ No transform or transition in style prop — JS controls 100%
                   className='w-full md:h-full overflow-hidden lg:object-cover object-contain'
+                  style={{
+                    transform: idx === current + 1
+                      ? 'translateX(-30%) scale(0.4)'
+                      : 'scale(1)',
+                    transition: isTransition ? 'transform 0.9s ease' : '',
+                  }}
                   src={item.mainImg}
                   alt={item.title}
                 />
@@ -259,13 +219,13 @@ const Services2 = () => {
 
               {/* Prev / Next buttons */}
               <div className='flex justify-center items-center gap-3 md:static fixed bottom-1 right-3'>
-                <button
+                {/* <button
                   onClick={prevSlide}
                   aria-label="Previous slide"
                   className='cursor-pointer lg:p-6 p-2 rounded-full bg-black shadow-[inset_0px_0px_16px_0px_gray,_0px_0px_2px_1px_black]'
                 >
                   <FiArrowLeft aria-hidden="true" className='md:text-3xl sm:text-2xl text-xl' />
-                </button>
+                </button> */}
                 <button
                   onClick={nextSlide}
                   aria-label="Next slide"
